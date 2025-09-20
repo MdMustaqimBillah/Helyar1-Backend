@@ -1,0 +1,87 @@
+from django.db import models
+from django.contrib.auth.models import AbstractBaseUser,PermissionsMixin
+from django.contrib.auth.base_user import BaseUserManager
+from django.utils import timezone
+
+# Create your models here.
+
+class UserManager(BaseUserManager):
+    def create_user(self, email, password=None, **extra_fields):
+        if not email:
+            raise ValueError("The Email field must be set")
+        email = self.normalize_email(email)
+        user = self.model(email=email, **extra_fields)
+        user.set_password(password)
+        user.save()
+        return user
+
+    def create_superuser(self, email, password=None, **extra_fields):
+        extra_fields.setdefault("is_staff", True)
+        extra_fields.setdefault("is_superuser", True)
+        extra_fields.setdefault("is_active", True)
+        extra_fields.setdefault("role","admin")
+
+        if extra_fields.get("is_staff") is not True:
+            raise ValueError("Superuser must have is_staff=True")
+        if extra_fields.get("is_superuser") is not True:
+            raise ValueError("Superuser must have is_superuser=True")
+        if extra_fields.get("is_active") is not True:
+            raise ValueError("Superuser must be is_active=True to act as an admin")
+        if extra_fields.get("role") !="admin":
+            raise ValueError("Superuser must be an active")
+        
+        return self.create_user(email=email, password=password, **extra_fields)
+    
+    
+    
+
+class User(AbstractBaseUser,PermissionsMixin):
+    
+    NOTIFICATION=(
+        ("push","Push"),
+        ("email","Email"),
+        ("sms","SMS")
+    )
+    
+    ROLE=(
+        ("customer","Customer"),
+        ("business","Business"),
+        ("admin","Admin")
+    )
+    
+    first_name = models.CharField(max_length=50)
+    last_name = models.CharField(max_length=50)
+    email = models.EmailField( unique = True)
+    phone_no = models.CharField(max_length = 18)
+    date_of_birth = models.DateField(blank=True, null=True)
+    notification_type = models.CharField(choices=NOTIFICATION, max_length=20)
+    role = models.CharField(choices=ROLE,max_length=20)
+    is_active = models.BooleanField(default=False)
+    is_staff = models.BooleanField(default=False)
+    is_superuser = models.BooleanField(default=False)
+    mail_verified = models.BooleanField(default=False)
+    joins = models.DateField(auto_now_add=True)
+    
+    
+    USERNAME_FIELD="email"
+    REQUIRED_FIELDS=[]
+    
+    objects=UserManager()
+    
+    def __str__(self):
+        return str(self.email)
+    
+    
+    
+class EmailVerification(models.Model):
+    user=models.OneToOneField(User,on_delete=models.CASCADE, related_name='mail_verification')
+    token=models.CharField(max_length=100, unique=True, blank=True, null=True)
+    expires_at=models.DateTimeField(blank=True, null=True)
+    
+    def __str__(self):
+        token_display=self.token[:5]+"..." if self.token else "no token"
+        
+        return f"{self.user.first_name} {self.user.last_name}'s token : {token_display}"
+    
+    def is_valid(self):
+        return timezone.now() <= self.expires_at
