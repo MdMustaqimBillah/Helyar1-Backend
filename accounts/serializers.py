@@ -1,11 +1,14 @@
 from django.contrib.auth import authenticate
-
+from django.conf import settings
 
 from rest_framework import serializers
 
 
-
 from .models import *
+
+import requests
+import logging
+logger = logging.getLogger(__name__)
 
 class UserSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True)
@@ -22,6 +25,25 @@ class UserSerializer(serializers.ModelSerializer):
         
         if len(data['password']) <8:
             raise serializers.ValidationError("Password is too small. At least 8 characters. ")
+
+        phone_number=data["phone_no"]
+        
+        api_key = settings.PHONE_NUMBER_VALIDATION_API_KEY
+        
+        url =f"https://phonevalidation.abstractapi.com/v1/?api_key={api_key}&phone={phone_number}&country_code=GB"
+        try:
+            
+            response = requests.get(url)
+            result = response.json()
+        except Exception as e:
+            logger.error(f"Error during phone number validation: {e}", exc_info=True)
+            raise serializers.ValidationError("Error validating phone number. Please try again later.")
+        
+        logger.debug(f"Phone validation response: {result}")
+        
+        if not result['valid']:
+            raise serializers.ValidationError("Invalid phone number")
+        data["phone_no"]=result['format']["international"]
         
         return data
         
@@ -52,7 +74,7 @@ class UserRegistrationSerializer(serializers.Serializer):
     email = serializers.EmailField()
     first_name = serializers.CharField()
     last_name = serializers.CharField()
-    #access_token = serializers.CharField()
+    access_token = serializers.CharField()
     refresh_token = serializers.CharField()
     
     
@@ -90,4 +112,9 @@ class LoginResponseSerializer(serializers.Serializer):
     first_name = serializers.CharField()
     last_name = serializers.CharField()
     refresh_token = serializers.CharField()
-    #access_token = serializers.CharField()
+    access_token = serializers.CharField()
+    
+    
+class ResendVerificationRequestSerializer(serializers.Serializer):
+    email = serializers.EmailField()
+    password = serializers.CharField()

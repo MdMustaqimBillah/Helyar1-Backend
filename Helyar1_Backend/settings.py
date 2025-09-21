@@ -39,11 +39,13 @@ INSTALLED_APPS = [
     
     #Local Apps
     'accounts.apps.AccountsConfig',
+    'offers.apps.OffersConfig',
     
     #Third-Party Apps
     'rest_framework',
-    'rest_framework_simplejwt', # For JWT Authentication
-    'drf_yasg', # For Automated documentation
+    'rest_framework_simplejwt', # For JWT Authentication# For Automated documentation
+    'drf_spectacular', # For Automated documentation OpenAPI 3.0
+    'drf_spectacular_sidecar', # To support spectacular when it will be deployed on production
     
 ]
 
@@ -152,7 +154,24 @@ REST_FRAMEWORK = {
     ],
     'DEFAULT_PARSER_CLASSES': [
         'rest_framework.parsers.JSONParser',
-    ]
+    ],
+    'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
+}
+
+
+# drf-spectacular settings
+SPECTACULAR_SETTINGS = {
+    'TITLE': 'Helyar1 Project API Documentation',
+    'DESCRIPTION': 'drf-spectacular generated API documentation for Helyar1 Project',
+    'VERSION': '1.0.0',
+    'SERVE_INCLUDE_SCHEMA': False,
+    'SWAGGER_UI_DIST': 'SIDECAR',  # shorthand to use the sidecar instead
+    'SWAGGER_UI_FAVICON_HREF': 'SIDECAR',
+    'REDOC_DIST': 'SIDECAR',
+    'TAGS': [
+        {'name': 'accounts'},
+        
+    ],
 }
 
 
@@ -202,3 +221,6 @@ EMAIL_PORT = env("EMAIL_PORT")
 EMAIL_HOST_USER = env("EMAIL_HOST_USER")
 EMAIL_HOST_PASSWORD = env("EMAIL_HOST_PASSWORD")
 EMAIL_USE_TLS = env("EMAIL_USE_TLS")
+
+#Phone Number Validation API Key
+PHONE_NUMBER_VALIDATION_API_KEY = env("PHONE_NUMBER_VALIDATION_API_KEY")
