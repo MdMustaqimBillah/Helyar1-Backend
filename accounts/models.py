@@ -45,7 +45,7 @@ class User(AbstractBaseUser,PermissionsMixin):
     
     ROLE=(
         ("customer","Customer"),
-        ("business","Business"),
+        ("retailer","Retailer"),
         ("admin","Admin")
     )
     
@@ -85,3 +85,19 @@ class EmailVerification(models.Model):
     
     def is_valid(self):
         return timezone.now() <= self.expires_at
+    
+    
+
+class ResetCode(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE,)
+    code = models.CharField(max_length=4)
+    created_at = models.DateTimeField(auto_now_add=True)
+    expires_at = models.DateTimeField()
+    used = models.BooleanField(default=False)
+    
+    def __str__(self):
+        return f"Reset code for {self.user.email} - Code: {self.code}"
+    
+    def is_valid(self):
+        return timezone.now() <= self.expires_at and not self.used
+    

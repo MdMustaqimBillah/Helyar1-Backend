@@ -17,7 +17,7 @@ from drf_spectacular.utils import extend_schema, OpenApiResponse
 from .models import *
 from .serializers import *
 
-
+import random
 import logging
 logger = logging.getLogger(__name__)
 # Create your views here.
@@ -287,4 +287,153 @@ class ResendMailVerificationView(APIView):
                 status=status.HTTP_404_NOT_FOUND
             )
         
+
+
+
+class ForgetPasswordRequestView(APIView):
+    permission_classes=[AllowAny]
+    
+    @extend_schema(
+        tags=['accounts'],
+        request=ForgetPasswordRequestSerializer,
+        responses={
+            200: OpenApiResponse(description="Password has been reset successfully"),
+            400: OpenApiResponse(description="Error: Bad Request"),
+            404: OpenApiResponse(description="Error: User not found"),
+        },
+        description="Reset password for a user.",
+        summary="Forget Password",
+    )
+    def post(self, request):
+        serializer = ForgetPasswordRequestSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
         
+        email = serializer.validated_data.get("email")
+        
+        try:
+            user=User.object.get(email=email)
+            
+            token = ResetCode.objects.create(user=user)
+            token.code = f"{random.randint(1000,9999)}"
+            token.expires_at = timezone.now() + timezone.timedelta(minutes=10)
+            token.used = False
+            token.save()             
+            
+            state=send_reset_code_email(user, token.code)
+            
+            if state:
+                return Response(
+                    {'detail':"Password reset code has been sent to your email."},
+                    status=status.HTTP_200_OK
+                )
+            
+            
+        except User.DoesNotExist:
+            return Response(
+                
+                {'detail':"User with this email does not exist."},
+                status=status.HTTP_404_NOT_FOUND
+            )
+            
+            
+def send_reset_code_email(user, code):
+    try:
+        send_mail(
+            'Password Reset Code',
+            f'''Your password reset code is: {code}
+            
+            This code will expire in 10 minutes. Do not share this code with others for security reasons.
+            ''',
+            settings.EMAIL_HOST_USER,
+            [user.email],
+            fail_silently=False,
+        )
+        logger.info("Password reset code email sent successfully.")
+        return True
+    
+    except Exception as e:
+        logger.error("Couldn't send password reset code email", exc_info=True)
+        raise e
+    
+    
+class ResetPasswordView(APIView):
+    permission_classes=[AllowAny]
+    
+    @extend_schema(
+        tags=['accounts'],
+        request=ResetPasswordSerializer,
+        responses={
+            200: OpenApiResponse(description="Password has been reset successfully"),
+            400: OpenApiResponse(description="Error: Bad Request"),
+            404: OpenApiResponse(description="Error: User or Reset code not found"),
+        },
+        description="Reset password using reset code.",
+        summary="Reset Password",
+    )
+    
+    def post(self, request):
+        serializer = ResetPasswordSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        
+        email = serializer.validated_data.get("email")
+        code = serializer.validated_data.get("code")
+        password = serializer.validated_data.get("password")
+        
+        try:
+            user = User.objects.get(email=email)
+            
+            try:
+                reset_code = ResetCode.objects.get(user=user, code=code)
+                
+                if reset_code.is_valid():
+                    user.set_password(password)
+                    user.save()
+                    
+                    reset_code.used = True
+                    
+                    return Response(
+                        {'detail':"Password has been reset successfully."},
+                        status=status.HTTP_200_OK
+                    )
+                else:
+                    return Response(
+                        {'detail':"Reset code has expired. Please request a new one."},
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
+                    
+            except ResetCode.DoesNotExist:
+                return Response(
+                    {'detail':"Invalid reset code."},
+                    status=status.HTTP_404_NOT_FOUND
+                )
+                
+        except User.DoesNotExist:
+            return Response(
+                {'detail':"User with this email does not exist."},
+                status=status.HTTP_404_NOT_FOUND
+            )
+            
+            
+            
+            
+            
+
+class UserLogoutView(APIView):
+    
+    
+    def post(self, request):
+        try:
+            refresh_token = request.data.get("refresh_token")
+            token = RefreshToken(refresh_token)
+            token.blacklist()
+            
+            return Response(
+                {"detail":"User logged out successfully."},
+                status=status.HTTP_200_OK
+            )
+        except Exception as e:
+            logger.error("Error during logout", exc_info=True)
+            return Response(
+                {"detail": str(e)},
+                status=status.HTTP_400_BAD_REQUEST
+            )

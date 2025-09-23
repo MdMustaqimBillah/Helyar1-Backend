@@ -16,7 +16,7 @@ class UserSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
         fields = [
-            'first_name','last_name','email','date_of_birth','phone_no','notification_type','password','password2'
+            'id','first_name','last_name','email','date_of_birth','phone_no','notification_type','password','password2'
         ]
         
     def validate(self, data):
@@ -118,3 +118,36 @@ class LoginResponseSerializer(serializers.Serializer):
 class ResendVerificationRequestSerializer(serializers.Serializer):
     email = serializers.EmailField()
     password = serializers.CharField()
+
+
+
+class ForgetPasswordRequestSerializer(serializers.Serializer):
+    email = serializers.EmailField()
+
+    def validate_mail(self):
+        try:
+            user = User.objects.get(email=self.email)
+        except User.DoesNotExist:
+            raise serializers.ValidationError("User with this email does not exist.")
+        return self.email
+
+class ResetPasswordSerializer(serializers.Serializer):
+    password = serializers.CharField()
+    password2 = serializers.CharField()
+    
+    def validate(self, data):
+        if data['password'] != data['password2']:
+            raise serializers.ValidationError("Password doesn't match")
+        
+        if len(data['password']) <8:
+            raise serializers.ValidationError("Password is too small. At least 8 characters. ")
+        
+        return data
+    
+
+
+class ResetCodeSerializer(serializers.Serializer):
+    user = serializers.EmailField(source='user.email', read_only=True)
+    class Meta:
+        model = ResetCode
+        fields = ['id','code','created_at']
