@@ -1,3 +1,4 @@
+from django.utils.text import slugify
 from django.db import models
 
 class Category(models.Model):
@@ -7,6 +8,8 @@ class Category(models.Model):
 
     class Meta:
         ordering = ["name"]
+        verbose_name = 'Category'
+        verbose_name_plural = 'Categories'
 
     def __str__(self):
         return self.name
@@ -21,6 +24,8 @@ class SubCategory(models.Model):
     class Meta:
         ordering = ["name"]
         unique_together = ("category", "name")
+        verbose_name = 'SubCategory'
+        verbose_name_plural = 'SubCategories'
 
     def __str__(self):
         return f"{self.category.name} → {self.name}"
@@ -42,6 +47,11 @@ class Product(models.Model):
 
     def __str__(self):
         return self.name
+    
+    def save(self, *args, **kwargs):
+        if not self.slug:
+            self.slug = slugify(self.name)
+        super().save(*args, **kwargs)
 
 
 class Coupon(models.Model):
@@ -54,7 +64,7 @@ class Coupon(models.Model):
     ]
 
     product = models.ForeignKey(Product, on_delete=models.CASCADE, related_name="coupons")
-    code = models.CharField(max_length=50, unique=True)
+    code = models.CharField(max_length=150, unique=True)
     description = models.TextField(blank=True, null=True, help_text="Optional: describe the offer")
     discount_percent = models.PositiveIntegerField(blank=True, null=True)
     discount_amount = models.DecimalField(max_digits=10, decimal_places=2, blank=True, null=True)

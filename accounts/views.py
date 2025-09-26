@@ -1,11 +1,13 @@
-from django.shortcuts import render
+from django.contrib.auth.models import update_last_login
+from django.utils.timezone import now
 from django.core.mail import send_mail
+from django.shortcuts import render
 from django.conf import settings
 
 
 from rest_framework.generics import CreateAPIView
 from rest_framework.views import APIView
-from rest_framework.permissions import AllowAny
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework import status
 
@@ -16,6 +18,7 @@ from drf_spectacular.utils import extend_schema, OpenApiResponse
 
 from .models import *
 from .serializers import *
+from .tasks import mail_send
 
 import random
 import logging
@@ -51,25 +54,18 @@ class UserRegistrationView(CreateAPIView):
         
         token = mail_obj.token
         
-        url = f'http://127.0.0.1:8000/api/accounts/mail-verification/{token}'
+        url = f'http://127.0.0.1:8000/api/accounts/mail-verification/{token}/'
         try:
-        
-            send_mail(
-                'Verify your mail',
-                f'''Click on the link or copy & paste the like on your browser to verify your mail.
+            subject = "Verify your mail"
+            message =  f'''Click on the link or copy & paste the like on your browser to verify your mail.
                 
                 Url: {url}
                 
                 Do not share this link with others for security reasons. The link will be valid for 1 hour
-                ''',
-                
-                settings.EMAIL_HOST_USER,
-                
-                [user.email],
-                
-                fail_silently = False            
-                
-            )
+                '''
+        
+            mail_send(subject,message,user)
+            
             logger.info("Mail sent successfully.")
             
             return Response(
@@ -84,6 +80,11 @@ class UserRegistrationView(CreateAPIView):
                 status = status.HTTP_400_BAD_REQUEST
             )
             
+        
+        
+        
+        
+        
         
         
 class EmailVerificationView(APIView):
@@ -103,16 +104,24 @@ class EmailVerificationView(APIView):
     
     def get(self, request, token):
         
+        item = EmailVerification.objects.get(token=token)
+        if item:
+            logger.info(f"item object: {item}")
+        
         try:
             logger.info("Executing Try method for mail verification")
+            logger.info(f"Received Token: {token}")
             verification_token = EmailVerification.objects.get(token=token)
+            logger.error(f"Verification Token Retrieved: {verification_token}")
+            
             logger.info(f"Verification Token: {verification_token.token}")
+            logger.info(f"Token Validty: {verification_token.is_valid()}")
             if verification_token.is_valid():
                 user = verification_token.user
                 user.is_active = True
                 user.mail_verified = True
+                user.role = "customer"
                 user.save()
-                verification_token.delete()
 
                 ref_token = RefreshToken.for_user(user)
                 logger.debug(f"refresh token : {str(ref_token)}")
@@ -121,7 +130,7 @@ class EmailVerificationView(APIView):
                     "first_name":user.first_name,
                     "last_name":user.last_name,
                     "refresh_token":str(ref_token),
-                    #"access_token":str(ref_token.access)
+                    "access_token":str(ref_token.access_token)
                 }
 
                 return Response(
@@ -150,72 +159,11 @@ class EmailVerificationView(APIView):
             
             
             
-class UserLoginView(APIView):
-    serializer_class = LoginSerializer
-    permission_classes = [AllowAny]
-    
-    
-    @extend_schema(
-        tags=["accounts"],
-        request=LoginSerializer,
-        responses={
-            202: LoginResponseSerializer,
-            400: OpenApiResponse(description="Error: Bad Request"),
-            500: OpenApiResponse(description="Error: Internal Server Error"),
-        },
-        description="Login a user and return JWT tokens.",
-        summary="User Login",
-    )
-    
-    def post(self, request):
-        try:
-            serializer=LoginSerializer(data=request.data)
-            serializer.is_valid(raise_exception=True)
             
-            user = serializer.validated_data["user"]
-            email = user.email
-            first_name = user.first_name
-            last_name = user.last_name
             
-            refresh_token = RefreshToken.for_user(user)
-            access_token = refresh_token.access_token
             
-            response = {
-                "email": email,
-                "first_name": first_name,
-                "last_name": last_name,
-                "refresh_token": refresh_token,
-                "access_token": access_token
-            }
             
-            login_response = LoginResponseSerializer(response)
             
-            logger.info(f"LoginResponse: {login_response}")
-            
-            logger.info(f"LoginResponse.data: {login_response.data}")
-            
-            return Response (
-                {"detail": login_response.data},
-                status = status.HTTP_202_ACCEPTED
-            )
-            
-        except serializer.ValidationError as e:
-            logger.error("Validation error during login", exc_info=True)
-            return Response (
-                {"detail": str(e)},
-                status = status.HTTP_400_BAD_REQUEST
-            )
-            
-        except Exception as e:
-            logger.error("Error during login", exc_info=True)
-            return Response (
-                {"detail": str(e)},
-                status = status.HTTP_500_INTERNAL_SERVER_ERROR
-            )
-            
-
-
-
 class ResendMailVerificationView(APIView):
     permission_classes=[AllowAny]
     
@@ -236,9 +184,11 @@ class ResendMailVerificationView(APIView):
         password = request.data.get("password")
         
         try:
-            user = User.objects.get(email=email, password=password)
-                
+            logger.info(f"Resend verification request for email: {email}")
+            user = User.objects.get(email=email)
+            logger.debug(f"User found: {user}")
             if user.mail_verified:
+                logger.info("Mail is already verified. Please login.")
                 return Response(
                     {"detail":"Mail is already verified. Please login."},
                     status=status.HTTP_400_BAD_REQUEST
@@ -255,21 +205,16 @@ class ResendMailVerificationView(APIView):
                 url = f'http://127.0.0.1:8000/api/accounts/mail-verification/{token}'
                 
                 try:
-                    send_mail(
-                        'Verify your mail',
-                        f'''Click on the link or copy & paste the like on your browser to verify your mail.
+                    subject = 'Verify your mail'
+                    message = f'''Click on the link or copy & paste the like on your browser to verify your mail.
                         
                         Url: {url}
                         
                         Do not share this link with others for security reasons. The link will be valid for 1 hour
-                        ''',
+                        '''
                         
-                        settings.EMAIL_HOST_USER,
-                        
-                        [user.email],
-                        
-                        fail_silently = False            
-                    )
+                    mail_send(subject,message,user)
+                    
                     logger.info("Mail sent successfully.")
                     return Response(
                         {'detail':"Verification mail has been sent. Check your mail box."},
@@ -287,6 +232,79 @@ class ResendMailVerificationView(APIView):
                 status=status.HTTP_404_NOT_FOUND
             )
         
+
+
+           
+class UserLoginView(APIView):
+    serializer_class = LoginSerializer
+    permission_classes = [AllowAny]
+    
+    
+    @extend_schema(
+        tags=["accounts"],
+        request=LoginSerializer,
+        responses={
+            202: LoginResponseSerializer,
+            400: OpenApiResponse(description="Error: Bad Request"),
+            500: OpenApiResponse(description="Error: Internal Server Error"),
+        },
+        description="Login a user and return JWT tokens.",
+        summary="User Login",
+    )
+    
+    def post(self, request):
+        try:
+            serializer=self.serializer_class(data=request.data)
+            logger.info(f"Login data received: {request.data}")
+            serializer.is_valid(raise_exception=True)
+            
+            user = serializer.validated_data["user"]
+            update_last_login(None, user)
+            logger.info(f"Authenticated user: {user}")
+            email = user.email
+            first_name = user.first_name
+            last_name = user.last_name
+            
+            refresh_token = RefreshToken.for_user(user)
+            access_token = refresh_token.access_token
+            
+            response = {
+                "email": email,
+                "first_name": first_name,
+                "last_name": last_name,
+                "refresh_token": str(refresh_token),
+                "access_token": str(access_token)
+            }
+            
+            login_response = LoginResponseSerializer(response)
+            
+            logger.info(f"LoginResponse: {login_response}")
+            
+            logger.info(f"LoginResponse.data: {login_response.data}")
+            
+            return Response (
+                {"detail": login_response.data},
+                status = status.HTTP_202_ACCEPTED
+            )
+            
+        except serializers.ValidationError as e:
+            logger.error("Validation error during login", exc_info=True)
+            return Response (
+                {"detail": str(e)},
+                status = status.HTTP_400_BAD_REQUEST
+            )
+            
+        except Exception as e:
+            logger.error("Error during login", exc_info=True)
+            return Response (
+                {"detail": str(e)},
+                status = status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+            
+
+
+
+
 
 
 
@@ -311,21 +329,27 @@ class ForgetPasswordRequestView(APIView):
         email = serializer.validated_data.get("email")
         
         try:
-            user=User.object.get(email=email)
+            user=User.objects.get(email=email)
             
-            token = ResetCode.objects.create(user=user)
-            token.code = f"{random.randint(1000,9999)}"
+            token = PasswordResetCode.objects.create(user=user)
+            token.code = f"{random.randint(243010,999999)}"
             token.expires_at = timezone.now() + timezone.timedelta(minutes=10)
-            token.used = False
             token.save()             
-            
-            state=send_reset_code_email(user, token.code)
+            subject = "Password Reset Code"
+        
+            message = f'''Your password reset code is: {token.code}
+                    
+                    This code will expire in 10 minutes. Do not share this code with others for security reasons.
+                    ''' 
+            state=mail_send(user,subject,message,code=token.code) # sending mail
             
             if state:
                 return Response(
                     {'detail':"Password reset code has been sent to your email."},
                     status=status.HTTP_200_OK
-                )
+                ) 
+                
+                # Next part is handled by ResetPasswordView
             
             
         except User.DoesNotExist:
@@ -336,27 +360,14 @@ class ForgetPasswordRequestView(APIView):
             )
             
             
-def send_reset_code_email(user, code):
-    try:
-        send_mail(
-            'Password Reset Code',
-            f'''Your password reset code is: {code}
-            
-            This code will expire in 10 minutes. Do not share this code with others for security reasons.
-            ''',
-            settings.EMAIL_HOST_USER,
-            [user.email],
-            fail_silently=False,
-        )
-        logger.info("Password reset code email sent successfully.")
-        return True
-    
-    except Exception as e:
-        logger.error("Couldn't send password reset code email", exc_info=True)
-        raise e
+
+
+
+
+
     
     
-class ResetPasswordView(APIView):
+class ResetPasswordView(APIView): # Actions very after ForgetPasswordRequestView
     permission_classes=[AllowAny]
     
     @extend_schema(
@@ -383,7 +394,7 @@ class ResetPasswordView(APIView):
             user = User.objects.get(email=email)
             
             try:
-                reset_code = ResetCode.objects.get(user=user, code=code)
+                reset_code = PasswordResetCode.objects.get(user=user, code=code, used=False)
                 
                 if reset_code.is_valid():
                     user.set_password(password)
@@ -401,7 +412,7 @@ class ResetPasswordView(APIView):
                         status=status.HTTP_400_BAD_REQUEST
                     )
                     
-            except ResetCode.DoesNotExist:
+            except PasswordResetCode.DoesNotExist:
                 return Response(
                     {'detail':"Invalid reset code."},
                     status=status.HTTP_404_NOT_FOUND
@@ -419,13 +430,16 @@ class ResetPasswordView(APIView):
             
 
 class UserLogoutView(APIView):
-    
+    permission_classes=[IsAuthenticated]    
     
     def post(self, request):
         try:
             refresh_token = request.data.get("refresh_token")
             token = RefreshToken(refresh_token)
             token.blacklist()
+            user = request.user
+            user.last_logout = now()
+            user.save(update_fields=["last_logout"])
             
             return Response(
                 {"detail":"User logged out successfully."},

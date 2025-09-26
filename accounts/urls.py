@@ -9,6 +9,5 @@ urlpatterns = [
     path('resend-verification/', ResendMailVerificationView.as_view()),
     path('forget-password/', ForgetPasswordRequestView.as_view()),
     path('reset-password/', ResetPasswordView.as_view()),
-    path('logout/', UserLogoutView.as_view()),
-    
+    path('logout/', UserLogoutView.as_view())    
 ]

@@ -60,6 +60,7 @@ class User(AbstractBaseUser,PermissionsMixin):
     is_staff = models.BooleanField(default=False)
     is_superuser = models.BooleanField(default=False)
     mail_verified = models.BooleanField(default=False)
+    last_logout = models.DateTimeField(null=True, blank=True)
     joins = models.DateField(auto_now_add=True)
     
     
@@ -88,11 +89,11 @@ class EmailVerification(models.Model):
     
     
 
-class ResetCode(models.Model):
+class PasswordResetCode(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE,)
     code = models.CharField(max_length=4)
     created_at = models.DateTimeField(auto_now_add=True)
-    expires_at = models.DateTimeField()
+    expires_at = models.DateTimeField(null=True, blank=True)
     used = models.BooleanField(default=False)
     
     def __str__(self):

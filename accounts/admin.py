@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import User,EmailVerification
+from .models import *
 
 # Register your models here.
 
@@ -7,6 +7,9 @@ class EmailVerificationInline(admin.StackedInline):
     model = EmailVerification
     can_delete = True
     verbose_name_plural = 'Email Verification'
+    
+    
+    
 
 class UserAdmin(admin.ModelAdmin):
     list_display =['email','first_name','last_name','role','is_staff','is_active','mail_verified','phone_no', 'joins']
@@ -36,5 +39,29 @@ class EmailVerificationAdmin(admin.ModelAdmin):
         'user__email','token'
     ]
     
+    
+    
+class PasswordResetCodeAdmin(admin.ModelAdmin):
+    list_display=[
+        'get_user_email','code','created_at','used','expires_at'
+    ]
+    
+    def get_user_email(self,obj):
+        return obj.user.email
+    
+    get_user_email.short_description = 'User Email' # By short description we set field's table(column) name
+    
+    search_fields=[
+        'user__email','code'
+    ]
+    
+    list_filter=[
+        'used','created_at','expires_at'
+    ]
+    
+    
+    
+
 admin.site.register(User,UserAdmin)
 admin.site.register(EmailVerification,EmailVerificationAdmin)
+admin.site.register(PasswordResetCode,PasswordResetCodeAdmin)

@@ -45,6 +45,7 @@ INSTALLED_APPS = [
     #Third-Party Apps
     'rest_framework',
     'rest_framework_simplejwt', # For JWT Authentication# For Automated documentation
+    'rest_framework_simplejwt.token_blacklist', # For Blacklisting Refresh Tokens
     'drf_spectacular', # For Automated documentation OpenAPI 3.0
     'drf_spectacular_sidecar', # To support spectacular when it will be deployed on production
     
@@ -230,3 +231,36 @@ EMAIL_USE_TLS = env("EMAIL_USE_TLS")
 
 #Phone Number Validation API Key
 PHONE_NUMBER_VALIDATION_API_KEY = env("PHONE_NUMBER_VALIDATION_API_KEY")
+
+
+from datetime import timedelta
+
+SIMPLE_JWT = {
+    'ACCESS_TOKEN_LIFETIME': timedelta(days=1),  # Example: 5 minutes
+    'REFRESH_TOKEN_LIFETIME': timedelta(days=30),   # Example: 1 day
+    'ROTATE_REFRESH_TOKENS': True,
+    'BLACKLIST_AFTER_ROTATION': True,
+    'UPDATE_LAST_LOGIN': False,
+
+    'ALGORITHM': 'HS256',
+    'SIGNING_KEY': 'your_secret_key',  # Replace with a strong, secret key (ideally from environment variables)
+    'VERIFYING_KEY': None,
+    'AUDIENCE': None,
+    'ISSUER': None,
+
+    'AUTH_HEADER_TYPES': ('Bearer',),
+    'AUTH_HEADER_NAME': 'HTTP_AUTHORIZATION',
+    'USER_ID_FIELD': 'id',
+    'USER_ID_CLAIM': 'user_id',
+    'USER_AUTHENTICATION_RULE': 'rest_framework_simplejwt.authentication.default_user_authentication_rule',
+
+    'AUTH_TOKEN_CLASSES': ('rest_framework_simplejwt.tokens.AccessToken',),
+    'TOKEN_TYPE_CLAIM': 'token_type',
+    'TOKEN_USER_CLASS': 'rest_framework_simplejwt.models.TokenUser',
+
+    'JTI_CLAIM': 'jti',
+
+    'SLIDING_TOKEN_REFRESH_EXP_CLAIM': 'refresh_exp',
+    'SLIDING_TOKEN_LIFETIME': timedelta(days=1),
+    'SLIDING_TOKEN_REFRESH_LIFETIME': timedelta(days=30),
+}

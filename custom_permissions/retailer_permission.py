@@ -6,5 +6,10 @@ class IsOwner(permissions.BasePermission):
         # Allow GET, HEAD, or OPTIONS requests (read-only access) for any authenticated user.
         if request.method in permissions.SAFE_METHODS:
             return True
+        
+        if not request.user.retailer:
+            raise permissions.PermissionDenied("Only retailers can perform this action.")
+        
+        
 
         return obj.user == request.user
