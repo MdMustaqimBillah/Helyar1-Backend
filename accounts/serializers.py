@@ -57,7 +57,15 @@ class UserRegistrationSerializer(serializers.Serializer):
     access_token = serializers.CharField()
     refresh_token = serializers.CharField()
     
+
+
+class RetailerAccountRequestSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = RetailerAccountRequest
+        fields = ['business_name','business_sector','website_link','owner_name','contact_email','contact_phone', 'contact_details', 'document']
+        read_only_fields = ['id','approved','submitted_at']
     
+
 
 class LoginSerializer(serializers.Serializer):
     email = serializers.EmailField()
@@ -108,22 +116,13 @@ class ForgetPasswordRequestSerializer(serializers.Serializer):
             user = User.objects.get(email=value)
         except User.DoesNotExist:
             raise serializers.ValidationError("User with this email does not exist.")
+        
         return self.email
-
-class ResetPasswordSerializer(serializers.Serializer):
-    code = serializers.CharField()
-    email = serializers.EmailField()
-    password = serializers.CharField()
-    password2 = serializers.CharField()
     
-    def validate(self, data):
-        if data['password'] != data['password2']:
-            raise serializers.ValidationError("Password doesn't match")
-        
-        if len(data['password']) <8:
-            raise serializers.ValidationError("Password is too small. At least 8 characters. ")
-        
-        return data
+class CheckResetCodeSerializer(serializers.Serializer):
+    email = serializers.EmailField()
+    code = serializers.CharField()
+    
     
     def validate_code(self,value):
         try:
@@ -140,6 +139,23 @@ class ResetPasswordSerializer(serializers.Serializer):
         
         if token.expires_at and token.expires_at < timezone.now():
             raise serializers.ValidationError("This reset code has expired.")
-        
+    
         return value
+
+class ResetPasswordSerializer(serializers.Serializer):
+    
+    email = serializers.EmailField()
+    password = serializers.CharField()
+    password2 = serializers.CharField()
+    
+    def validate(self, data):
+        if data['password'] != data['password2']:
+            raise serializers.ValidationError("Password doesn't match")
+        
+        if len(data['password']) <8:
+            raise serializers.ValidationError("Password is too small. At least 8 characters. ")
+        
+        return data
+    
+
     

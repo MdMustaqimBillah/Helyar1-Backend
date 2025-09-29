@@ -1,57 +1,39 @@
+# serializers.py
 from rest_framework import serializers
-from .models import *
+from .models import Category, SubCategory, Offer
 
 
-class CategorySerializer(serializers.ModelSerializer):
+class OfferSerializer(serializers.ModelSerializer):
+    subcategory_name = serializers.CharField(source="subcategory.name", read_only=True)
+    user_email = serializers.CharField(source="user.email", read_only=True)
+    
     class Meta:
-        model = Category
-        fields = "__all__"
-        read_only_fields = ["id"]
-        
-        
+        model = Offer
+        fields = [
+            "id", "subcategory", "subcategory_name", "user", "user_email",
+            "slug", "brand_name", "coupon_code", "description", 
+            "discount_percent", "discount_amount", "start_date", "end_date", 
+            "usage_type", "is_active", "max_uses", "minimum_purchase", 
+            "created_at", "retailer_url"
+        ]
+        read_only_fields = ["id", "user", "user_email", "subcategory_name", "created_at"]
+
+
 class SubCategorySerializer(serializers.ModelSerializer):
-    category = CategorySerializer(read_only=True)
+    # Use the correct related_name from the model
+    products = OfferSerializer(many=True, read_only=True)
+    category_name = serializers.CharField(source="category.name", read_only=True)
 
     class Meta:
         model = SubCategory
-        fields = ["id", "category", "name", "slug", "description",]
-        read_only_fields = ["id"]
-        
-class ProductSerializer(serializers.ModelSerializer):
-    subcategory = SubCategorySerializer(read_only=True)
+        fields = ["id", "category", "category_name", "name", "slug", "description", "products"]
+        read_only_fields = ["id", "category_name"]
 
 
+class CategorySerializer(serializers.ModelSerializer):
+    subcategories = SubCategorySerializer(many=True, read_only=True)
+    
     class Meta:
-        model = Product
-        fields = [
-            "id",
-            "subcategory",
-            "name",
-            "slug",
-            "description",
-            "image",
-            "price",
-            "available",
-            "retailer_url",
-        ]
-        read_only_fields = ["id"]
-        
-        
-class CouponSerializer(serializers.ModelSerializer):
-    product = ProductSerializer(read_only=True)
-
-    class Meta:
-        model = Coupon
-        fields = [
-            "id",
-            "product",
-            "code",
-            "description",
-            "discount_percent",
-            "discount_amount",
-            "usage_type",
-            "valid_from",
-            "valid_to",
-            "active",
-        ]
+        model = Category
+        fields = ["id", "name", "slug", "description", "subcategories"]
         read_only_fields = ["id"]

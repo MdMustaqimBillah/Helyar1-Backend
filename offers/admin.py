@@ -1,84 +1,251 @@
+# admin.py
 from django.contrib import admin
+from .models import Category, SubCategory, Offer
 
-from .models import *
 
-# Register your models here.
-
+@admin.register(Category)
 class CategoryAdmin(admin.ModelAdmin):
+    list_display = ['name', 'slug', 'description']
     prepopulated_fields = {'slug': ('name',)}
-    list_display = ['name', 'description', 'slug']
-    search_fields = ['name', 'slug', 'description']
-    list_filter = ['name', 'slug']
+    search_fields = ['name']
     
+    def has_module_permission(self, request):
+        """Allow access for superusers, staff, and retailers."""
+        if not request.user.is_authenticated:
+            return False
+        
+        if request.user.is_superuser or request.user.is_staff:
+            return True
+        
+        return hasattr(request.user, 'role') and request.user.role == "retailer"
     
-    def get_object(self,obj):
-        return obj.name
+    def has_add_permission(self, request):
+        """Allow retailers to add categories."""
+        if not request.user.is_authenticated:
+            return False
+        
+        if request.user.is_superuser or request.user.is_staff:
+            return True
+        
+        return hasattr(request.user, 'role') and request.user.role == "retailer"
     
-    get_object.short_description = 'Category Name' # By short description we set field's table(column) name
-    
-    def get_form(self, request, obj=None, **kwargs):
-        form = super().get_form(request, obj, **kwargs)
-        form.base_fields['slug'].help_text = "Leave blank to auto-generate from name"
-        form.base_fields['slug'].required = False
-        return form
-    
+    def has_view_permission(self, request, obj=None):
+        """Allow retailers to view categories."""
+        if not request.user.is_authenticated:
+            return False
+        
+        if request.user.is_superuser or request.user.is_staff:
+            return True
+        
+        return hasattr(request.user, 'role') and request.user.role == "retailer"
 
+
+@admin.register(SubCategory)
 class SubCategoryAdmin(admin.ModelAdmin):
-    prepopulated_fields = {'slug': ('name',)}    
-    list_display = ['name', 'category', 'description', 'slug']
-    search_fields = ['category__name','name', 'slug', 'description']
-    list_filter = ['category', 'name', 'slug']
-    
-    
-    def get_object(self,obj):
-        return obj.name
-    
-    
-    get_object.short_description = 'SubCategory Name' # By short description we set field's table(column) name
-    
-    
-    def get_form(self, request, obj=None, **kwargs):
-        form = super().get_form(request, obj, **kwargs)
-        form.base_fields['slug'].help_text = "Leave blank to auto-generate from name"
-        form.base_fields['slug'].required = False
-        return form
-
-class ProductAdmin(admin.ModelAdmin):
+    list_display = ['name', 'category', 'slug', 'description']
     prepopulated_fields = {'slug': ('name',)}
-    list_display = [ 'subcategory__category__name', 'subcategory','name', 'price', 'available']
-    search_fields = ['subcategory__name','name', 'slug', 'description', 'price', 'available' ]
-    list_filter = ['subcategory', 'price', 'available']
+    search_fields = ['name', 'category__name']
+    list_filter = ['category']
+    
+    def has_module_permission(self, request):
+        """Allow access for superusers, staff, and retailers."""
+        if not request.user.is_authenticated:
+            return False
+        
+        if request.user.is_superuser or request.user.is_staff:
+            return True
+        
+        return hasattr(request.user, 'role') and request.user.role == "retailer"
+    
+    def has_add_permission(self, request):
+        """Allow retailers to add subcategories."""
+        if not request.user.is_authenticated:
+            return False
+        
+        if request.user.is_superuser or request.user.is_staff:
+            return True
+        
+        return hasattr(request.user, 'role') and request.user.role == "retailer"
     
     
-    def get_object(self,obj):
-        return obj.name
+    def has_view_permission(self, request, obj=None):
+        """Allow retailers to view subcategories."""
+        if not request.user.is_authenticated:
+            return False
+        
+        if request.user.is_superuser or request.user.is_staff:
+            return True
+        
+        return hasattr(request.user, 'role') and request.user.role == "retailer"
+
+
+@admin.register(Offer)
+class OfferAdmin(admin.ModelAdmin):
+    list_display = [
+        'brand_name', 'coupon_code', 'subcategory', 
+        'discount_percent', 'discount_amount', 'is_active', 
+        'start_date', 'end_date', 'user'
+    ]
+    prepopulated_fields = {'slug': ('brand_name', 'coupon_code')}
+    search_fields = ['brand_name', 'coupon_code', 'description']
+    list_filter = ['is_active', 'usage_type', 'subcategory__category', 'subcategory']
+    date_hierarchy = 'created_at'
+    readonly_fields = ['created_at']
     
+    fieldsets = (
+        ('Basic Information', {
+            'fields': ('subcategory', 'brand_name', 'slug', 'coupon_code')
+        }),
+        ('Discount Details', {
+            'fields': ('description', 'discount_percent', 'discount_amount', 'minimum_purchase')
+        }),
+        ('Validity & Usage', {
+            'fields': ('start_date', 'end_date', 'usage_type', 'max_uses', 'is_active')
+        }),
+        ('External Link', {
+            'fields': ('retailer_url',)
+        }),
+        ('Metadata', {
+            'fields': ('created_at',),
+            'classes': ('collapse',)
+        }),
+    )
     
-    get_object.short_description = 'Product Name' # By short description we set field's table(column) name
+    def get_fieldsets(self, request, obj=None):
+        """
+        Add 'user' field for superusers, hide it for retailers.
+        """
+        fieldsets = super().get_fieldsets(request, obj)
+        
+        if request.user.is_superuser:
+            # Add user field for superusers
+            fieldsets = list(fieldsets)
+            basic_info = list(fieldsets[0])
+            fields = list(basic_info[1]['fields'])
+            if 'user' not in fields:
+                fields.insert(1, 'user')  # Add after subcategory
+            basic_info[1]['fields'] = tuple(fields)
+            fieldsets[0] = tuple(basic_info)
+            return tuple(fieldsets)
+        
+        return fieldsets
     
-    def get_form(self, request, obj=None, **kwargs):
-        form = super().get_form(request, obj, **kwargs)
-        form.base_fields['slug'].help_text = "Leave blank to auto-generate from name"
-        form.base_fields['slug'].required = False
-        return form
+    def has_module_permission(self, request):
+        """
+        Allow access for:
+        - Superusers
+        - Staff members
+        - Authenticated users with 'retailer' role
+        """
+        if not request.user.is_authenticated:
+            return False
+        
+        if request.user.is_superuser or request.user.is_staff:
+            return True
+        
+        # Check for retailer role
+        return hasattr(request.user, 'role') and request.user.role == "retailer"
     
+    def get_queryset(self, request):
+        """
+        Filter queryset based on user role.
+        Retailers only see their own offers.
+        Superusers and staff see everything.
+        """
+        qs = super().get_queryset(request)
+        
+        # Superusers and staff see everything
+        if request.user.is_superuser or request.user.is_staff:
+            return qs
+        
+        # Retailers only see their own offers
+        if hasattr(request.user, 'role') and request.user.role == "retailer":
+            return qs.filter(user=request.user)
+        
+        # Return empty queryset for other users
+        return qs.none()
     
-class CouponAdmin(admin.ModelAdmin):
-    list_display = ['product__name', 'code','discount_percent','discount_amount', 'description', 'start_date', 'end_date', 'usage_type', 'is_active']
-    search_fields = ['product__name', 'code', 'usage_type','discount_percentage','discount_amount','start_date', 'end_date' ]
-    list_filter = ['usage_type', 'start_date', 'end_date', 'is_active']
+    def save_model(self, request, obj, form, change):
+        """
+        Auto-assign the current user when creating a new offer (for retailers).
+        Superusers can manually assign users.
+        """
+        if not change and not request.user.is_superuser:
+            # Only auto-assign for new offers by non-superusers
+            obj.user = request.user
+        super().save_model(request, obj, form, change)
     
+    def get_readonly_fields(self, request, obj=None):
+        """
+        Make 'user' field readonly for retailers.
+        """
+        readonly = list(super().get_readonly_fields(request, obj))
+        
+        # Retailers cannot change the user field
+        if not request.user.is_superuser and 'user' not in readonly:
+            readonly.append('user')
+        
+        return readonly
     
-    def get_object(self,obj):
-        return obj.code
+    def has_add_permission(self, request):
+        """
+        Allow retailers and superusers to add offers.
+        """
+        if not request.user.is_authenticated:
+            return False
+        
+        if request.user.is_superuser or request.user.is_staff:
+            return True
+        
+        return hasattr(request.user, 'role') and request.user.role == "retailer"
     
+    def has_change_permission(self, request, obj=None):
+        """
+        Users can only edit their own offers (except superusers/staff).
+        """
+        if not request.user.is_authenticated:
+            return False
+        
+        if request.user.is_superuser or request.user.is_staff:
+            return True
+        
+        if obj is not None:
+            # Check if user owns this offer
+            return obj.user == request.user
+        
+        # General permission check
+        return hasattr(request.user, 'role') and request.user.role == "retailer"
     
-    get_object.short_description = 'Coupon Code' # By short description we set field's table(column) name
+    def has_delete_permission(self, request, obj=None):
+        """
+        Users can only delete their own offers (except superusers/staff).
+        """
+        if not request.user.is_authenticated:
+            return False
+        
+        if request.user.is_superuser or request.user.is_staff:
+            return True
+        
+        if obj is not None:
+            # Check if user owns this offer
+            return obj.user == request.user
+        
+        # General permission check
+        return hasattr(request.user, 'role') and request.user.role == "retailer"
     
-    
-    
-    
-admin.site.register(Category,CategoryAdmin)
-admin.site.register(SubCategory,SubCategoryAdmin)
-admin.site.register(Product,ProductAdmin)
-admin.site.register(Coupon,CouponAdmin)
+    def has_view_permission(self, request, obj=None):
+        """
+        Users can only view their own offers (except superusers/staff).
+        """
+        if not request.user.is_authenticated:
+            return False
+        
+        if request.user.is_superuser or request.user.is_staff:
+            return True
+        
+        if obj is not None:
+            # Check if user owns this offer
+            return obj.user == request.user
+        
+        # General permission check
+        return hasattr(request.user, 'role') and request.user.role == "retailer"

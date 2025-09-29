@@ -8,12 +8,22 @@ from drf_spectacular.views import (
     SpectacularRedocView,
 )
 
+
+admin.site.site_header = "Administration"
+admin.site.site_title = "Welcome to Admin Site"
+
+
+
 urlpatterns = [
     path("admin/", admin.site.urls),
 
     # App routes
     path("api/accounts/", include("accounts.urls")),
     path("api/offers/", include("offers.urls")),
+    path("api/profiles/", include("user_profile.urls")),
+    path("api/notifications/", include("notifications.urls")),
+    path("subscriptons/", include("subscriptions.urls")),
+    path("api/logo/", include("logo.urls")),
 
     # API schema
     path("api/schema/", SpectacularAPIView.as_view(), name="schema"),

@@ -1,5 +1,6 @@
 from django.contrib.auth.models import update_last_login
 from django.utils.timezone import now
+from django.urls import reverse
 from django.core.mail import send_mail
 from django.shortcuts import render
 from django.conf import settings
@@ -9,9 +10,11 @@ from rest_framework.generics import CreateAPIView
 from rest_framework.views import APIView
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
+from rest_framework.generics import CreateAPIView
 from rest_framework import status
+from rest_framework.parsers import MultiPartParser, FormParser
 
-from rest_framework_simplejwt.tokens import RefreshToken
+from rest_framework_simplejwt.tokens import RefreshToken, TokenError
 
 from drf_spectacular.utils import extend_schema, OpenApiResponse
 
@@ -54,7 +57,11 @@ class UserRegistrationView(CreateAPIView):
         
         token = mail_obj.token
         
-        url = f'http://127.0.0.1:8000/api/accounts/mail-verification/{token}/'
+        # Build URL dynamically using request
+        verification_path = reverse('mail-verification', kwargs={'token': token})
+        # Get the full URL with domain
+        url = request.build_absolute_uri(verification_path)
+        
         try:
             subject = "Verify your mail"
             message =  f'''Click on the link or copy & paste the like on your browser to verify your mail.
@@ -64,7 +71,7 @@ class UserRegistrationView(CreateAPIView):
                 Do not share this link with others for security reasons. The link will be valid for 1 hour
                 '''
         
-            mail_send(subject,message,user)
+            mail_send(user,subject,message)
             
             logger.info("Mail sent successfully.")
             
@@ -202,7 +209,10 @@ class ResendMailVerificationView(APIView):
                 mail_obj.expires_at = timezone.now() + timezone.timedelta(hours=1)
                 mail_obj.save()
                 
-                url = f'http://127.0.0.1:8000/api/accounts/mail-verification/{token}'
+                # Build URL dynamically using request
+                verification_path = reverse('mail-verification', kwargs={'token': token})
+                # Get the full URL with domain
+                url = request.build_absolute_uri(verification_path)
                 
                 try:
                     subject = 'Verify your mail'
@@ -232,6 +242,42 @@ class ResendMailVerificationView(APIView):
                 status=status.HTTP_404_NOT_FOUND
             )
         
+
+
+
+class RetailerAccountRequestView(CreateAPIView):
+    serializer_class = RetailerAccountRequestSerializer
+    permission_classes = [ AllowAny ]
+    parser_classes = [MultiPartParser, FormParser]
+    
+    @extend_schema(
+        tags=['accounts'],
+        request=RetailerAccountRequestSerializer,
+        responses={
+            201: OpenApiResponse(description="Retailer account request submitted successfully"),
+            400: OpenApiResponse(description="Bad request"),
+        },
+        description="Submit a retailer account request.",
+        summary="Retailer Account Request",
+    )
+    
+    def create(self, request, *args, **kwargs ):
+        try:
+            serializer = self.get_serializer(data=request.data)
+            serializer.is_valid(raise_exception=True)
+            self.perform_create(serializer)
+            headers = self.get_success_headers(serializer.data)
+            return Response(
+                {'detail':"Retailer account request submitted successfully."},
+                status = status.HTTP_201_CREATED,
+                headers = headers
+            )
+        except Exception as e:
+            logger.error("Error submitting retailer account request", exc_info=True)
+            return Response(
+                {"detail": str(e)},
+                status = status.HTTP_400_BAD_REQUEST
+            )
 
 
            
@@ -360,35 +406,27 @@ class ForgetPasswordRequestView(APIView):
             )
             
             
-
-
-
-
-
-    
-    
-class ResetPasswordView(APIView): # Actions very after ForgetPasswordRequestView
+class CheckResetCodeView(APIView):     # Actions very after ForgetPasswordRequestView
     permission_classes=[AllowAny]
     
     @extend_schema(
         tags=['accounts'],
-        request=ResetPasswordSerializer,
+        request=CheckResetCodeSerializer,
         responses={
-            200: OpenApiResponse(description="Password has been reset successfully"),
+            200: OpenApiResponse(description="Reset code is valid"),
             400: OpenApiResponse(description="Error: Bad Request"),
             404: OpenApiResponse(description="Error: User or Reset code not found"),
         },
-        description="Reset password using reset code.",
-        summary="Reset Password",
+        description="Check if the reset code is valid.",
+        summary="Check Reset Code",
     )
     
     def post(self, request):
-        serializer = ResetPasswordSerializer(data=request.data)
+        serializer = CheckResetCodeSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         
         email = serializer.validated_data.get("email")
         code = serializer.validated_data.get("code")
-        password = serializer.validated_data.get("password")
         
         try:
             user = User.objects.get(email=email)
@@ -397,13 +435,10 @@ class ResetPasswordView(APIView): # Actions very after ForgetPasswordRequestView
                 reset_code = PasswordResetCode.objects.get(user=user, code=code, used=False)
                 
                 if reset_code.is_valid():
-                    user.set_password(password)
-                    user.save()
-                    
                     reset_code.used = True
-                    
+                    reset_code.save()
                     return Response(
-                        {'detail':"Password has been reset successfully."},
+                        {'detail':"Reset code is valid."},
                         status=status.HTTP_200_OK
                     )
                 else:
@@ -423,6 +458,47 @@ class ResetPasswordView(APIView): # Actions very after ForgetPasswordRequestView
                 {'detail':"User with this email does not exist."},
                 status=status.HTTP_404_NOT_FOUND
             )
+
+
+
+
+    
+    
+class ResetPasswordView(APIView):   # Actions very after CheckResetCodeView
+    permission_classes=[AllowAny]
+    
+    @extend_schema(
+        tags=['accounts'],
+        request=ResetPasswordSerializer,
+        responses={
+            200: OpenApiResponse(description="Password has been reset successfully"),
+            400: OpenApiResponse(description="Error: Bad Request"),
+            404: OpenApiResponse(description="Error: User or Reset code not found"),
+        },
+        description="Reset password using reset code.",
+        summary="Reset Password",
+    )
+    
+    def post(self, request):
+        serializer = ResetPasswordSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        
+        email = serializer.validated_data.get("email")
+        password = serializer.validated_data.get("password")
+        
+        try:
+            user = User.objects.get(email=email)
+            user.set_password(password)
+            user.save()   
+            return Response(
+                {'detail':"Password has been reset successfully."},
+                status=status.HTTP_200_OK
+            )              
+        except User.DoesNotExist:
+            return Response(
+                {'detail':"User with this email does not exist."},
+                status=status.HTTP_404_NOT_FOUND
+            )
             
             
             
@@ -430,24 +506,44 @@ class ResetPasswordView(APIView): # Actions very after ForgetPasswordRequestView
             
 
 class UserLogoutView(APIView):
-    permission_classes=[IsAuthenticated]    
+    permission_classes = [IsAuthenticated]
     
     def post(self, request):
+
         try:
-            refresh_token = request.data.get("refresh_token")
+            refresh_token = request.data.get("refresh_token") # Get refresh token from request data
+            
+            if not refresh_token:
+                return Response(
+                    {"detail": "Refresh token is required"},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            # Blacklist the refresh token
             token = RefreshToken(refresh_token)
             token.blacklist()
+            
+            # Update user's last logout time
             user = request.user
             user.last_logout = now()
             user.save(update_fields=["last_logout"])
             
+            logger.info(f"User {user.id} logged out successfully")
+            
             return Response(
-                {"detail":"User logged out successfully."},
+                {"detail": "User logged out successfully."},
                 status=status.HTTP_200_OK
             )
-        except Exception as e:
-            logger.error("Error during logout", exc_info=True)
+            
+        except TokenError:
+            logger.warning(f"Invalid refresh token provided for user {request.user.id}")
             return Response(
-                {"detail": str(e)},
+                {"detail": "Invalid or expired refresh token"},
                 status=status.HTTP_400_BAD_REQUEST
+            )
+        except Exception as e:
+            logger.error(f"Error during logout for user {request.user.id}", exc_info=True)
+            return Response(
+                {"detail": "An error occurred during logout"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )

@@ -55,7 +55,7 @@ class User(AbstractBaseUser,PermissionsMixin):
     phone_no = models.CharField(max_length = 18)
     date_of_birth = models.DateField(blank=True, null=True)
     notification_type = models.CharField(choices=NOTIFICATION, max_length=20)
-    role = models.CharField(choices=ROLE,max_length=20)
+    role = models.CharField(choices=ROLE,max_length=20, default="customer")
     is_active = models.BooleanField(default=False)
     is_staff = models.BooleanField(default=False)
     is_superuser = models.BooleanField(default=False)
@@ -86,6 +86,19 @@ class EmailVerification(models.Model):
     
     def is_valid(self):
         return timezone.now() <= self.expires_at
+    
+    
+class RetailerAccountRequest(models.Model):
+    business_name = models.CharField(max_length=100)
+    business_sector = models.CharField(max_length=100)
+    website_link = models.URLField(max_length=200, blank=True, null=True)
+    owner_name = models.CharField(max_length=100)
+    contact_email = models.EmailField()
+    contact_phone = models.CharField(max_length=18)
+    contact_details = models.TextField()
+    document = models.FileField(upload_to='retailer_documents/', blank=True, null=True)
+    account_created = models.BooleanField(default=False)
+    submitted_at = models.DateTimeField(auto_now_add=True)
     
     
 

@@ -11,7 +11,6 @@ env = environ.Env(
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-
 environ.Env.read_env(os.path.join(BASE_DIR, ".env"))
 
 # Quick-start development settings - unsuitable for production
@@ -29,7 +28,7 @@ ALLOWED_HOSTS = env.list("ALLOWED_HOSTS")
 # Application definition
 
 INSTALLED_APPS = [
-    'jazzmin',  # For Admin UI Customization
+    #'jazzmin',  # For Admin UI Customization
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
@@ -41,8 +40,13 @@ INSTALLED_APPS = [
     #Local Apps
     'accounts.apps.AccountsConfig',
     'offers.apps.OffersConfig',
+    'user_profile.apps.UserProfileConfig',
+    'notifications.apps.NotificationsConfig',
+    'subscriptions.apps.SubscriptionsConfig',
+    'logo.apps.LogoConfig',
     
     #Third-Party Apps
+    'django_cleanup.apps.CleanupConfig', # For cleaning up old files
     'rest_framework',
     'rest_framework_simplejwt', # For JWT Authentication# For Automated documentation
     'rest_framework_simplejwt.token_blacklist', # For Blacklisting Refresh Tokens
@@ -77,6 +81,7 @@ TEMPLATES = [
                 'django.template.context_processors.request',
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
+                # 'logo.context_processors.site_settings', # came from context processors.py files site_settings function to change admin panel logo
             ],
         },
     },
@@ -219,6 +224,19 @@ LOGGING = {
 }
 
 
+# JAZZMIN_UI_TWEAKS = {
+#     "theme": "darkly",
+# }
+
+# JAZZMIN_SETTINGS = {
+#     "site_title": "Maximum Savings",
+#     "site_header": "Maximum Savings Admin",
+#     "welcome_sign": "Welcome to Maximum Savings",
+    
+#     "site_logo": "logos/admin(1).png",  # Must exist in STATICFILES_DIRS
+#     "site_logo_classes": "img-circle",
+#     "site_icon": None,
+# }
 
 # Mail Configuration
 
@@ -264,3 +282,8 @@ SIMPLE_JWT = {
     'SLIDING_TOKEN_LIFETIME': timedelta(days=1),
     'SLIDING_TOKEN_REFRESH_LIFETIME': timedelta(days=30),
 }
+
+
+# Stripe Configuration
+STRIPE_API_KEY = env("STRIPE_API_KEY")
+STRIPE_PUBLISHABLE_KEY = env("STRIPE_PUBLISHABLE_KEY")

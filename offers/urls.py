@@ -1,9 +1,10 @@
+# urls.py
 from django.urls import path
-from .views import *
+from .views import CategoryListView, CategoryDetailView, OfferDetailView
 
 
 urlpatterns = [
-    path('subcategories/<slug:slug>/', CategoryListView.as_view()),
-    path('product/<slug:slug>/', ProductDetailView.as_view()),
-    path('coupon/<slug:slug>/', CouponDetailView.as_view()),
+    path('categories/', CategoryListView.as_view(), name='category-list'),
+    path('categories/<slug:slug>/', CategoryDetailView.as_view(), name='category-detail'),
+    path('offers/<slug:slug>/', OfferDetailView.as_view(), name='offer-detail'),
 ]

@@ -1,5 +1,9 @@
+# models.py
 from django.utils.text import slugify
+from django.utils import timezone
 from django.db import models
+from accounts.models import User
+
 
 class Category(models.Model):
     name = models.CharField(max_length=50, unique=True)
@@ -31,30 +35,7 @@ class SubCategory(models.Model):
         return f"{self.category.name} → {self.name}"
 
 
-class Product(models.Model):
-    subcategory = models.ForeignKey(SubCategory, on_delete=models.CASCADE, related_name="products")
-    name = models.CharField(max_length=100)
-    slug = models.SlugField(max_length=150, unique=True)
-    description = models.TextField()
-    image = models.ImageField(upload_to="products/", blank=True)
-    price = models.DecimalField(max_digits=10, decimal_places=2, blank=True, null=True)
-    available = models.BooleanField(default=True)
-    retailer_url = models.URLField(help_text="External website where coupon can be used")
-
-    class Meta:
-        ordering = ["name"]
-        unique_together = ("subcategory", "name")
-
-    def __str__(self):
-        return self.name
-    
-    def save(self, *args, **kwargs):
-        if not self.slug:
-            self.slug = slugify(self.name)
-        super().save(*args, **kwargs)
-
-
-class Coupon(models.Model):
+class Offer(models.Model):
     SINGLE_USE = "single"
     MULTI_USE = "multi"
 
@@ -62,9 +43,12 @@ class Coupon(models.Model):
         (SINGLE_USE, "Single Use"),
         (MULTI_USE, "Multi Use"),
     ]
-
-    product = models.ForeignKey(Product, on_delete=models.CASCADE, related_name="coupons")
-    code = models.CharField(max_length=150, unique=True)
+    
+    subcategory = models.ForeignKey(SubCategory, on_delete=models.CASCADE, related_name="products")
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="offer_user")
+    brand_name = models.CharField(max_length=100)
+    slug = models.SlugField(max_length=150, unique=True)
+    coupon_code = models.CharField(max_length=150, unique=True)
     description = models.TextField(blank=True, null=True, help_text="Optional: describe the offer")
     discount_percent = models.PositiveIntegerField(blank=True, null=True)
     discount_amount = models.DecimalField(max_digits=10, decimal_places=2, blank=True, null=True)
@@ -72,9 +56,26 @@ class Coupon(models.Model):
     end_date = models.DateTimeField()
     usage_type = models.CharField(max_length=10, choices=USAGE_CHOICES, default=MULTI_USE)
     is_active = models.BooleanField(default=True)
+    max_uses = models.PositiveIntegerField(null=True, blank=True, 
+                                         help_text="Max total uses (null = unlimited)")
+    minimum_purchase = models.DecimalField(max_digits=10, decimal_places=2, 
+                                         null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    retailer_url = models.URLField(help_text="External website where coupon can be used")
 
     class Meta:
-        ordering = ["-start_date"]
+        ordering = ["brand_name"]
 
     def __str__(self):
-        return f"{self.code} ({self.product.name})"
+        return f"{self.brand_name} - {self.coupon_code}"
+    
+    def save(self, *args, **kwargs):
+        if not self.slug:
+            # Create slug from brand_name and coupon_code
+            self.slug = slugify(f"{self.brand_name}-{self.coupon_code}")
+        super().save(*args, **kwargs)
+        
+    def is_valid(self):
+        now = timezone.now()
+        return (self.is_active and 
+                self.start_date <= now <= self.end_date)
