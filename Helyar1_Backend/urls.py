@@ -22,7 +22,7 @@ urlpatterns = [
     path("api/offers/", include("offers.urls")),
     path("api/profiles/", include("user_profile.urls")),
     path("api/notifications/", include("notifications.urls")),
-    path("subscriptons/", include("subscriptions.urls")),
+    path("api/subscriptions/", include("subscriptions.urls")),
     path("api/logo/", include("logo.urls")),
 
     # API schema

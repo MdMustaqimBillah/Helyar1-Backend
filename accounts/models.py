@@ -60,6 +60,7 @@ class User(AbstractBaseUser,PermissionsMixin):
     is_staff = models.BooleanField(default=False)
     is_superuser = models.BooleanField(default=False)
     mail_verified = models.BooleanField(default=False)
+    subscribed = models.BooleanField(default=False)
     last_logout = models.DateTimeField(null=True, blank=True)
     joins = models.DateField(auto_now_add=True)
     

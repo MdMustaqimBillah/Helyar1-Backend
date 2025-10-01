@@ -285,5 +285,16 @@ SIMPLE_JWT = {
 
 
 # Stripe Configuration
-STRIPE_API_KEY = env("STRIPE_API_KEY")
-STRIPE_PUBLISHABLE_KEY = env("STRIPE_PUBLISHABLE_KEY")
+STRIPE_API_KEY=env("STRIPE_API_KEY")
+STRIPE_PUBLISHABLE_KEY=env("STRIPE_PUBLISHABLE_KEY")
+STRIPE_WEBHOOK_SECRET=env("STRIPE_WEBHOOK_SECRET")
+
+
+
+DOMAIN = 'http://localhost:3000'  # MY React app URL
+
+# Plan prices in cents
+STRIPE_PRICES = {
+    'basic': 599,    # $5.99
+    'premium': 999,  # $9.99
+}

@@ -9,6 +9,7 @@ from django.db.models import Q
 from .models import Category,SubCategory, Offer
 from .serializers import CategorySerializer, OfferSerializer
 from custom_permissions.retailer_permission import IsOwner
+from custom_permissions.user_subscribed_permission import IsSubscribed
 
 
 class CategoryListView(APIView):
@@ -74,7 +75,7 @@ class CategoryDetailView(APIView):
 
 
 class OfferDetailView(APIView):
-    permission_classes = [permissions.IsAuthenticated, IsOwner]
+    permission_classes = [ IsOwner, IsSubscribed ]
     
     @extend_schema(
         tags=["Offers"],
@@ -104,6 +105,7 @@ class OfferDetailView(APIView):
 
 
 class OfferSearchView(APIView):
+    permission_classes=[ IsSubscribed ]
     def get(self, request, *args, **kwargs):
         query = request.query_params.get("q", "").strip()
         if not query:

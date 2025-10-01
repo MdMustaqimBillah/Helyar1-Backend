@@ -1,119 +1,255 @@
-from django.shortcuts import render
-from django.conf import settings
-from django.views.decorators.csrf import csrf_exempt
-from django.http import JsonResponse
-from .models import Subscription
-from .serializers import SubscriptionSerializer
-from rest_framework import generics, permissions
-from rest_framework.response import Response
-from rest_framework import status
 import stripe
 import logging
-import decimal
+from decimal import Decimal
+from django.conf import settings
+from django.http import HttpResponse
+from django.views.decorators.csrf import csrf_exempt
+from django.utils.decorators import method_decorator
 
+from rest_framework import status
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from rest_framework.permissions import AllowAny, IsAuthenticated
+
+from accounts.models import User
+from .models import Subscription
+from .serializers import SubscriptionSerializer, CreateCheckoutSerializer
 
 logger = logging.getLogger(__name__)
 
-
-# Create your views here.
-
 stripe.api_key = settings.STRIPE_API_KEY
 
-class CheckOutView(generics.CreateAPIView):
-    serializer_class = SubscriptionSerializer
-    permission_classes = [permissions.IsAuthenticated]
 
-    def post(self, request, *args, **kwargs):
-        serializer = self.get_serializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        
+class CreateCheckoutSessionView(APIView):
+    permission_classes = [IsAuthenticated]
     
+    def post(self, request):
+        serializer = CreateCheckoutSerializer(data=request.data)
+        
+        if not serializer.is_valid():
+            return Response(
+                {"details": "Serializer is not valid", "error": serializer.errors},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        plan = serializer.validated_data['plan']
+        user = request.user
+        
+        # Check if user already has active subscription
+        if Subscription.objects.filter(user=user, is_active=True).exists():
+            return Response(
+                {"details": "You have already subscribed"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Get price from settings
+        price_cents = settings.STRIPE_PRICES.get(plan)
+        if not price_cents:
+            return Response(
+                {"details": "Invalid plan"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
         try:
-            # Create Stripe Checkout Session (test mode)
             checkout_session = stripe.checkout.Session.create(
-                payment_method_types=['card'],
-                line_items=[
-                    {
-                        'price_data': {
-                            'currency': 'usd',  # Test with USD
-                            'product_data': {
-                                'name': 'Lifetime Access',
-                            },
-                            'unit_amount': int(serializer.validated_data['price'] * 100),  # Convert to cents
+                line_items=[{
+                    'price_data': {
+                        'currency': 'usd',
+                        'unit_amount': price_cents,  # Already in cents from settings
+                        'product_data': {
+                            'name': f'{plan.capitalize()} Subscription',
+                            'description': f'One-time payment for {plan} plan',
                         },
-                        'quantity': 1,
                     },
-                ],
-                mode='payment',  # One-time payment
-                success_url=f"{settings.DOMAIN}/subscriptions/success/?session_id={{CHECKOUT_SESSION_ID}}",
-                cancel_url=f"{settings.DOMAIN}/subscriptions/cancel/",
+                    'quantity': 1
+                }],
+                mode='payment',
+                billing_address_collection='required',
+                success_url=settings.DOMAIN + '/subscription/success?session_id={CHECKOUT_SESSION_ID}',
+                cancel_url=settings.DOMAIN + '/subscription/cancel',
+                customer_email=user.email,
                 metadata={
-                    'user_id': str(request.user.id),
-                    'plan': serializer.validated_data['plan'],
-                    'price': str(serializer.validated_data['price']),
+                    'user_id': str(user.id),
+                    'user_email': user.email,
+                    'plan': plan,
                 }
             )
-            logger.info(f"Created Stripe Checkout Session: {checkout_session.id} for user {request.user.id}")
-            return Response({
-                'session_url': checkout_session.url,
-                'message': 'Redirecting to Stripe Checkout...'
-            }, status=status.HTTP_201_CREATED)
-        except Exception as e:
-            logger.error(f"Error creating Stripe session: {str(e)}")
-            return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
-
-@csrf_exempt
-def stripe_webhook(request):
-    payload = request.body
-    sig_header = request.META.get('HTTP_STRIPE_SIGNATURE')
-    event = None
-
-    try:
-        event = stripe.Webhook.construct_event(
-            payload, sig_header, settings.STRIPE_WEBHOOK_SECRET
-        )
-    except ValueError as e:
-        logger.error(f"Invalid webhook payload: {str(e)}")
-        return JsonResponse({'error': 'Invalid payload'}, status=400)
-    except stripe.error.SignatureVerificationError as e:
-        logger.error(f"Invalid webhook signature: {str(e)}")
-        return JsonResponse({'error': 'Invalid signature'}, status=400)
-
-    # Handle checkout.session.completed event
-    if event['type'] == 'checkout.session.completed':
-        session = event['data']['object']
-        try:
-            user_id = session['metadata']['user_id']
-            plan = session['metadata']['plan']
-            price = decimal.Decimal(session['metadata']['price'])
             
-            # Create or update subscription
+            # Create subscription record
             subscription, created = Subscription.objects.get_or_create(
-                user_id=user_id,
-                plan=plan,
+                user=user,
                 defaults={
-                    'price': price,
-                    'is_active': True,
-                    'payment_id': session['payment_intent'],
-                    'subscription_id': session['id']
+                    'plan': plan,
+                    'subscription_id': checkout_session.id,
+                    'status': 'inactive',
+                    'is_active': False
                 }
             )
+            
             if not created:
-                subscription.is_active = True
-                subscription.payment_id = session['payment_intent']
-                subscription.subscription_id = session['id']
+                subscription.plan = plan
+                subscription.subscription_id = checkout_session.id
+                subscription.status = 'inactive'
+                subscription.is_active = False
                 subscription.save()
             
-            logger.info(f"Subscription {'created' if created else 'updated'} for user {user_id}")
-        except Exception as e:
-            logger.error(f"Error processing webhook: {str(e)}")
-            return JsonResponse({'error': 'Webhook processing failed'}, status=400)
+            return Response({
+                'checkout_url': checkout_session.url,
+                'session_id': checkout_session.id
+            }, status=status.HTTP_200_OK)
+            
+        except stripe.error.StripeError as e:
+            logger.error(f"Stripe error: {str(e)}")
+            return Response(
+                {'error': str(e)},
+                status=status.HTTP_400_BAD_REQUEST
+            )
 
-    return JsonResponse({'status': 'success'}, status=200)
 
-def success_view(request):
-    session_id = request.GET.get('session_id', 'N/A')
-    return render(request, 'subscriptions/success.html', {'session_id': session_id})
+class CheckoutSuccessView(APIView):
+    permission_classes = [IsAuthenticated]
+    
+    def get(self, request):
+        session_id = request.query_params.get('session_id')
+        
+        if not session_id:
+            return Response(
+                {'error': 'Session ID required'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        try:
+            session = stripe.checkout.Session.retrieve(session_id)
+            try:
+                user = request.user
+                user.subscribed=True
+            except User.DoesNotExist:
+                return Response(
+                    {"details":"User not found."},
+                    status = status.HTTP_404_NOT_FOUND
+                )
+            
+            return Response({
+                'message': 'Payment successful! Your subscription will be activated shortly.',
+                'payment_status': session.payment_status,
+                'session_id': session_id
+            }, status=status.HTTP_200_OK)
+            
+        except stripe.error.StripeError as e:
+            return Response(
+                {'error': str(e)},
+                status=status.HTTP_400_BAD_REQUEST
+            )
 
-def cancel_view(request):
-    return render(request, 'subscriptions/cancel.html')
+
+@method_decorator(csrf_exempt, name='dispatch')
+class StripeWebhookView(APIView):
+    permission_classes = [AllowAny]
+    
+    def post(self, request):
+        payload = request.body
+        sig_header = request.META.get('HTTP_STRIPE_SIGNATURE')
+        endpoint_secret = settings.STRIPE_WEBHOOK_SECRET
+        
+        try:
+            event = stripe.Webhook.construct_event(
+                payload, sig_header, endpoint_secret
+            )
+        except ValueError:
+            logger.error("Invalid Payload")
+            return HttpResponse(status=400)
+        except stripe.error.SignatureVerificationError:
+            logger.error("Invalid Signature")
+            return HttpResponse(status=400)
+        
+        if event['type'] == 'checkout.session.completed':
+            session = event['data']['object']
+            
+            logger.info(f"✓ Checkout session completed: {session['id']}")
+            
+            user_id = session['metadata'].get('user_id')
+            plan = session['metadata'].get('plan')
+            
+            if user_id and session['payment_status'] == 'paid':
+                try:
+                    user = User.objects.get(id=user_id)
+                    
+                    subscription, created = Subscription.objects.get_or_create(
+                        user=user,
+                        defaults={
+                            'plan': plan,
+                            'payment_id': session.get('payment_intent'),
+                            'subscription_id': session['id'],
+                            'status': 'active',
+                            'is_active': True
+                        }
+                    )
+                    
+                    if not created:
+                        subscription.plan = plan
+                        subscription.payment_id = session.get('payment_intent')
+                        subscription.subscription_id = session['id']
+                        subscription.status = 'active'
+                        subscription.is_active = True
+                        subscription.save()
+                    
+                    logger.info(f"✓ Subscription activated for {user.email}")
+                    logger.info(f"  Plan: {plan}")
+                    logger.info(f"  Payment ID: {session.get('payment_intent')}")
+                    
+                except User.DoesNotExist:
+                    logger.error(f"✗ User {user_id} not found")
+                except Exception as e:
+                    logger.error(f"✗ Error activating subscription: {str(e)}")
+            else:
+                logger.warning(f"⚠ Payment not completed or missing user_id")
+        
+        elif event['type'] == 'checkout.session.expired':
+            session = event['data']['object']
+            logger.info(f"⚠ Checkout session expired: {session['id']}")
+        
+        return HttpResponse(status=200)
+
+
+class SubscriptionDetailView(APIView):
+    permission_classes = [IsAuthenticated]
+    
+    def get(self, request):
+        try:
+            subscription = Subscription.objects.get(user=request.user)
+            serializer = SubscriptionSerializer(subscription)
+            return Response(serializer.data, status=status.HTTP_200_OK)
+        except Subscription.DoesNotExist:
+            return Response(
+                {'message': 'No subscription found'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+
+class CancelSubscriptionView(APIView):
+    permission_classes = [IsAuthenticated]
+    
+    def post(self, request):
+        try:
+            subscription = Subscription.objects.get(user=request.user)
+            
+            if not subscription.is_active:
+                return Response(
+                    {'error': 'Subscription is not active'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            subscription.status = 'cancelled'
+            subscription.is_active = False
+            subscription.save()
+            
+            return Response({
+                'message': 'Subscription cancelled successfully',
+                'subscription': SubscriptionSerializer(subscription).data
+            }, status=status.HTTP_200_OK)
+            
+        except Subscription.DoesNotExist:
+            return Response(
+                {'error': 'No subscription found'},
+                status=status.HTTP_404_NOT_FOUND
+            )
