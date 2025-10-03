@@ -52,6 +52,7 @@ INSTALLED_APPS = [
     'rest_framework_simplejwt.token_blacklist', # For Blacklisting Refresh Tokens
     'drf_spectacular', # For Automated documentation OpenAPI 3.0
     'drf_spectacular_sidecar', # To support spectacular when it will be deployed on production
+    'django_celery_beat', # For celery
     
 ]
 
@@ -298,3 +299,32 @@ STRIPE_PRICES = {
     'basic': 599,    # $5.99
     'premium': 999,  # $9.99
 }
+
+
+
+
+#Netcore api setup
+NETCORE_CE_API_KEY = env('NETCORE_CE_API_KEY')
+NETCORE_EMAIL_API_KEY = env('NETCORE_EMAIL_API_KEY')
+FROM_EMAIL = env('FROM_EMAIL')
+
+# Twilio setup (Fixed: TWILLIO -> TWILIO)
+TWILIO_ACCOUNT_SID = env('TWILIO_ACCOUNT_SID')
+TWILIO_AUTH_TOKEN = env('TWILIO_AUTH_TOKEN')
+TWILIO_PHONE_NUMBER = env('TWILIO_PHONE_NUMBER')
+
+# Celery Configuration (Fixed: Use env.list for CELERY_ACCEPT_CONTENT)
+CELERY_BROKER_URL = env('CELERY_BROKER_URL', default='redis://localhost:6379/0')
+CELERY_RESULT_BACKEND = env('CELERY_RESULT_BACKEND', default='redis://localhost:6379/0')
+CELERY_ACCEPT_CONTENT = env.list('CELERY_ACCEPT_CONTENT', default=['json'])
+CELERY_TASK_SERIALIZER = env('CELERY_TASK_SERIALIZER', default='json')
+CELERY_RESULT_SERIALIZER = env('CELERY_RESULT_SERIALIZER', default='json')
+CELERY_TIMEZONE = env('CELERY_TIMEZONE', default='UTC')
+
+# Optional: For scheduled tasks (if using Celery Beat)
+CELERY_BEAT_SCHEDULER = env('CELERY_BEAT_SCHEDULER', default='django_celery_beat.schedulers:DatabaseScheduler')
+
+#GOOGLE LOGIN SETUP
+
+GOOGLE_CLIENT_ID=env('GOOGLE_CLIENT_ID')
+GOOELE_CLIENT_SECRET=env('GOOGLE_CLIENT_SECRET')

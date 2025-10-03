@@ -11,5 +11,7 @@ urlpatterns = [
     path('forget-password/', ForgetPasswordRequestView.as_view()),
     path('check-reset-code/', CheckResetCodeView.as_view()),
     path('reset-password/', ResetPasswordView.as_view()),
-    path('logout/', UserLogoutView.as_view())    
+    path('logout/', UserLogoutView.as_view()),
+    path('auth/google/login/', GoogleLoginView.as_view(), name='google-login'),
+    path('auth/google/callback/', GoogleCallbackView.as_view(), name='google-callback'),  
 ]
