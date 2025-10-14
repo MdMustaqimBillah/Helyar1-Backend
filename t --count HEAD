@@ -1,0 +1,29 @@
+[33mcommit 4db99d9d35dc52d22d25877263efc559f20523ba[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m, [m[1;31morigin/main[m[33m)[m
+Author: Muhammed Noman <muhammedalnoman@gmail.com>
+Date:   Fri Sep 26 06:05:33 2025 +0600
+
+    Offer apps done and Accounts works sucessfully
+
+[33mcommit 7d86265dfca9a9fd958a3746385f18759cae9b3b[m
+Author: Muhammed Noman <muhammedalnoman@gmail.com>
+Date:   Tue Sep 23 06:30:10 2025 +0600
+
+    offer's url file doen and open notification app
+
+[33mcommit aadeceb1fa6bf2d0243c39dbd8cd980f9647b4f2[m
+Author: Muhammed Noman <muhammedalnoman@gmail.com>
+Date:   Tue Sep 23 06:21:17 2025 +0600
+
+    offers app & password reset done
+
+[33mcommit e0508e96313c4f6f466067f7bd612057b0fcc6d6[m
+Author: Muhammed Noman <muhammedalnoman@gmail.com>
+Date:   Sun Sep 21 06:22:50 2025 +0600
+
+    Number verification using 3rd party api and offers model setup
+
+[33mcommit 80a58d365d5aaf1566b22e5be0a087e03d2d1550[m
+Author: Muhammed Noman <muhammedalnoman@gmail.com>
+Date:   Sat Sep 20 23:18:20 2025 +0600
+
+    Authentication part done
